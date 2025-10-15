@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📊 Dashboard - Hệ thống Tủ khóa Thông minh</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@2.29.3/index.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1><i class="fas fa-chart-line"></i> Dashboard Analytics</h1>
+            <div class="header-controls">
+                <button onclick="exportReport()" class="btn btn-export">
+                    <i class="fas fa-download"></i> Export Report
+                </button>
+                <button onclick="refreshData()" class="btn btn-refresh">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+            </div>
+        </header>
+
+        <!-- Stats Cards -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="fas fa-door-open"></i>
+                </div>
+                <div class="stat-content">
+                    <h3 id="totalOpens">0</h3>
+                    <p>Tổng số lần mở</p>
+                    <span class="stat-change positive" id="opensChange">+0%</span>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="fas fa-clock"></i>
+                </div>
+                <div class="stat-content">
+                    <h3 id="avgUsageTime">0m</h3>
+                    <p>Thời gian sử dụng TB</p>
+                    <span class="stat-change positive" id="timeChange">+0%</span>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="fas fa-users"></i>
+                </div>
+                <div class="stat-content">
+                    <h3 id="activeUsers">0</h3>
+                    <p>Người dùng hoạt động</p>
+                    <span class="stat-change positive" id="usersChange">+0%</span>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">
+                    <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <div class="stat-content">
+                    <h3 id="systemErrors">0</h3>
+                    <p>Lỗi hệ thống</p>
+                    <span class="stat-change negative" id="errorsChange">+0%</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="charts-grid">
+            <!-- Usage Chart -->
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3><i class="fas fa-chart-bar"></i> Sử dụng theo giờ</h3>
+                    <div class="chart-controls">
+                        <select id="timeRange" onchange="updateCharts()">
+                            <option value="24h">24 giờ qua</option>
+                            <option value="7d">7 ngày qua</option>
+                            <option value="30d">30 ngày qua</option>
+                        </select>
+                    </div>
+                </div>
+                <canvas id="usageChart"></canvas>
+            </div>
+
+            <!-- Status Distribution -->
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3><i class="fas fa-chart-pie"></i> Phân bố trạng thái</h3>
+                </div>
+                <canvas id="statusChart"></canvas>
+            </div>
+
+            <!-- Peak Hours -->
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3><i class="fas fa-chart-line"></i> Giờ cao điểm</h3>
+                </div>
+                <canvas id="peakChart"></canvas>
+            </div>
+
+            <!-- User Activity -->
+            <div class="chart-container">
+                <div class="chart-header">
+                    <h3><i class="fas fa-chart-area"></i> Hoạt động người dùng</h3>
+                </div>
+                <canvas id="userChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="activity-section">
+            <div class="section-header">
+                <h3><i class="fas fa-history"></i> Hoạt động gần đây</h3>
+                <button onclick="clearActivity()" class="btn btn-clear">Clear</button>
+            </div>
+            <div id="recentActivity" class="activity-list">
+                <!-- Activity items will be populated here -->
+            </div>
+        </div>
+
+        <!-- System Status -->
+        <div class="system-status">
+            <h3><i class="fas fa-server"></i> Trạng thái hệ thống</h3>
+            <div class="status-grid">
+                <div class="status-item">
+                    <span class="status-label">Firebase:</span>
+                    <span id="firebaseStatus" class="status-value online">Online</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">ESP32:</span>
+                    <span id="esp32Status" class="status-value online">Online</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Servo:</span>
+                    <span id="servoStatus" class="status-value online">OK</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">LED:</span>
+                    <span id="ledStatus" class="status-value online">OK</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK v12 -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
+        import { getDatabase, ref, onValue, set, get, push } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-database.js";
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBqfcOprdE5MT6m1yfXmRDtCzngtX86-7U",
+            authDomain: "minhquang-36ee2.firebaseapp.com",
+            databaseURL: "https://minhquang-36ee2-default-rtdb.firebaseio.com",
+            projectId: "minhquang-36ee2",
+            storageBucket: "minhquang-36ee2.firebasestorage.app",
+            messagingSenderId: "986858991599",
+            appId: "1:986858991599:web:53c36493204131a10c501a"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+
+        // Make functions available globally
+        window.database = database;
+        window.ref = ref;
+        window.onValue = onValue;
+        window.set = set;
+        window.get = get;
+        window.push = push;
+
+        console.log('✅ Dashboard Firebase initialized');
+    </script>
+    <script src="dashboard.js"></script>
+</body>
+</html>
+

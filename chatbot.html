@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🤖 AI Chatbot - Hệ thống Tủ khóa Thông minh</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1><i class="fas fa-robot"></i> AI Chatbot Assistant</h1>
+            <div class="header-controls">
+                <button onclick="goBack()" class="btn btn-back">
+                    <i class="fas fa-arrow-left"></i> Quay lại
+                </button>
+                <button onclick="clearChat()" class="btn btn-clear">
+                    <i class="fas fa-trash"></i> Xóa chat
+                </button>
+            </div>
+        </header>
+
+        <!-- Chat Container -->
+        <div class="chat-container">
+            <div class="chat-header">
+                <div class="bot-avatar">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <div class="bot-info">
+                    <h3>Smart Locker Bot</h3>
+                    <p id="botStatus">Đang hoạt động</p>
+                </div>
+                <div class="chat-controls">
+                    <button onclick="toggleVoice()" class="btn btn-voice" id="voiceBtn">
+                        <i class="fas fa-microphone"></i>
+                    </button>
+                    <button onclick="toggleTyping()" class="btn btn-typing" id="typingBtn">
+                        <i class="fas fa-keyboard"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Chat Messages -->
+            <div class="chat-messages" id="chatMessages">
+                <div class="message bot-message">
+                    <div class="message-avatar">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <div class="message-content">
+                        <div class="message-text">
+                            👋 Xin chào! Tôi là Smart Locker Bot, trợ lý AI của hệ thống tủ khóa thông minh. 
+                            Tôi có thể giúp bạn:
+                            <br>• Mở/đóng tủ khóa
+                            <br>• Kiểm tra trạng thái hệ thống
+                            <br>• Hướng dẫn sử dụng
+                            <br>• Xử lý sự cố
+                            <br><br>Bạn cần hỗ trợ gì?
+                        </div>
+                        <div class="message-time">Vừa xong</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="quick-actions">
+                <button onclick="sendQuickMessage('Mở tủ')" class="quick-btn">
+                    <i class="fas fa-unlock"></i> Mở tủ
+                </button>
+                <button onclick="sendQuickMessage('Đóng tủ')" class="quick-btn">
+                    <i class="fas fa-lock"></i> Đóng tủ
+                </button>
+                <button onclick="sendQuickMessage('Trạng thái hệ thống')" class="quick-btn">
+                    <i class="fas fa-info-circle"></i> Trạng thái
+                </button>
+                <button onclick="sendQuickMessage('Hướng dẫn sử dụng')" class="quick-btn">
+                    <i class="fas fa-question-circle"></i> Hướng dẫn
+                </button>
+            </div>
+
+            <!-- Chat Input -->
+            <div class="chat-input-container">
+                <div class="chat-input">
+                    <input type="text" id="messageInput" placeholder="Nhập tin nhắn..." onkeypress="handleKeyPress(event)">
+                    <button onclick="sendMessage()" class="btn btn-send" id="sendBtn">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+                <div class="input-options">
+                    <button onclick="attachFile()" class="btn btn-attach">
+                        <i class="fas fa-paperclip"></i>
+                    </button>
+                    <button onclick="sendEmoji()" class="btn btn-emoji">
+                        <i class="fas fa-smile"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Status Panel -->
+        <div class="status-panel">
+            <h3><i class="fas fa-server"></i> Trạng thái hệ thống</h3>
+            <div class="status-grid">
+                <div class="status-item">
+                    <span class="status-label">Firebase:</span>
+                    <span id="firebaseStatus" class="status-value online">Online</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">ESP32:</span>
+                    <span id="esp32Status" class="status-value online">Online</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">Servo:</span>
+                    <span id="servoStatus" class="status-value online">OK</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">LED:</span>
+                    <span id="ledStatus" class="status-value online">OK</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI Features -->
+        <div class="ai-features">
+            <h3><i class="fas fa-magic"></i> Tính năng AI</h3>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-brain"></i>
+                    </div>
+                    <div class="feature-content">
+                        <h4>Natural Language Processing</h4>
+                        <p>Hiểu ngôn ngữ tự nhiên và xử lý yêu cầu phức tạp</p>
+                    </div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-chart-line"></i>
+                    </div>
+                    <div class="feature-content">
+                        <h4>Predictive Analytics</h4>
+                        <p>Dự đoán sự cố và tối ưu hóa hiệu suất</p>
+                    </div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-shield-alt"></i>
+                    </div>
+                    <div class="feature-content">
+                        <h4>Smart Security</h4>
+                        <p>Phát hiện và ngăn chặn các mối đe dọa bảo mật</p>
+                    </div>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-cogs"></i>
+                    </div>
+                    <div class="feature-content">
+                        <h4>Auto Maintenance</h4>
+                        <p>Tự động bảo trì và cập nhật hệ thống</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK v12 -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
+        import { getDatabase, ref, onValue, set, get, push } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-database.js";
+
+        // Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyBqfcOprdE5MT6m1yfXmRDtCzngtX86-7U",
+            authDomain: "minhquang-36ee2.firebaseapp.com",
+            databaseURL: "https://minhquang-36ee2-default-rtdb.firebaseio.com",
+            projectId: "minhquang-36ee2",
+            storageBucket: "minhquang-36ee2.firebasestorage.app",
+            messagingSenderId: "986858991599",
+            appId: "1:986858991599:web:53c36493204131a10c501a"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+
+        // Make functions available globally
+        window.database = database;
+        window.ref = ref;
+        window.onValue = onValue;
+        window.set = set;
+        window.get = get;
+        window.push = push;
+
+        console.log('✅ Chatbot Firebase initialized');
+    </script>
+    <script src="chatbot.js"></script>
+</body>
+</html>
+
