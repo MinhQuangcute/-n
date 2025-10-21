@@ -1,465 +1,426 @@
-// Dashboard Analytics JavaScript
-let database, ref, onValue, set, get, push;
+// Dashboard Analytics JavaScript with backend APIs
+import { login, logout, isAuthenticated, getCurrentUser, authFetch } from './auth.js';
+
 let usageChart, statusChart, peakChart, userChart;
 let analyticsData = {
-    totalOpens: 0,
-    totalCloses: 0,
-    avgUsageTime: 0,
-    activeUsers: 0,
-    systemErrors: 0,
-    hourlyUsage: {},
-    statusDistribution: { open: 0, closed: 0, opening: 0, closing: 0 },
-    peakHours: {},
-    userActivity: []
+  totalOpens: 0,
+  totalCloses: 0,
+  avgUsageTime: 0,
+  activeUsers: 0,
+  systemErrors: 0,
+  hourlyUsage: {},
+  statusDistribution: { open: 0, closed: 0, opening: 0, closing: 0 },
+  peakHours: {},
+  userActivity: [],
 };
 
-// Wait for Firebase to be ready
-function waitForFirebase() {
-    return new Promise((resolve) => {
-        const checkFirebase = () => {
-            if (window.database && window.ref && window.onValue && window.set && window.get && window.push) {
-                database = window.database;
-                ref = window.ref;
-                onValue = window.onValue;
-                set = window.set;
-                get = window.get;
-                push = window.push;
-                console.log('✅ Dashboard Firebase ready');
-                resolve();
-            } else {
-                setTimeout(checkFirebase, 100);
-            }
-        };
-        checkFirebase();
-    });
-}
+let isConnected = false;
 
 // Initialize dashboard
-document.addEventListener('DOMContentLoaded', async function() {
-    console.log('📊 Dashboard initializing...');
-    
-    await waitForFirebase();
-    
-    // Initialize charts
-    initializeCharts();
-    
-    // Start listening to Firebase
-    startFirebaseListener();
-    
-    // Load historical data
-    loadHistoricalData();
-    
-    // Update data every 30 seconds
-    setInterval(updateDashboard, 30000);
-    
-    console.log('✅ Dashboard ready');
+document.addEventListener('DOMContentLoaded', async function () {
+  console.log('📊 Dashboard initializing...');
+  setupAuthUI();
+
+  // Initialize charts
+  initializeCharts();
+
+  // Load data from backend
+  if (isAuthenticated()) {
+    await loadFromBackend();
+    isConnected = true;
+    updateSystemStatus();
+  }
+
+  // Update UI every 30 seconds
+  setInterval(updateDashboard, 30000);
+
+  console.log('✅ Dashboard ready');
 });
+
+async function loadFromBackend() {
+  try {
+    const [statusRes, analyticsRes, activityRes] = await Promise.all([
+      authFetch('/api/locker/status'),
+      authFetch('/api/analytics'),
+      authFetch('/api/activity'),
+    ]);
+    if (statusRes.ok) {
+      const status = await statusRes.json();
+      updateAnalytics(status);
+    }
+    if (analyticsRes.ok) {
+      const a = await analyticsRes.json();
+      analyticsData.hourlyUsage = a.hourlyUsage || {};
+      analyticsData.statusDistribution = a.statusDistribution || analyticsData.statusDistribution;
+      analyticsData.totalOpens = (a.stats && a.stats.totalOpens) || analyticsData.totalOpens;
+      analyticsData.activeUsers = (a.stats && a.stats.activeUsers) || analyticsData.activeUsers;
+      analyticsData.systemErrors = (a.stats && a.stats.systemErrors) || analyticsData.systemErrors;
+      analyticsData.peakHours = a.peakHours || {};
+    }
+    if (activityRes.ok) {
+      const activities = await activityRes.json();
+      const map = {};
+      activities.forEach((item) => (map[item.id || Math.random()] = item));
+      updateRecentActivity(map);
+    }
+    updateDashboard();
+  } catch (e) {
+    console.error('Failed to load backend data', e);
+  }
+}
 
 // Initialize all charts
 function initializeCharts() {
-    // Usage Chart
-    const usageCtx = document.getElementById('usageChart').getContext('2d');
-    usageChart = new Chart(usageCtx, {
-        type: 'line',
-        data: {
-            labels: [],
-            datasets: [{
-                label: 'Lần mở/giờ',
-                data: [],
-                borderColor: '#667eea',
-                backgroundColor: 'rgba(102, 126, 234, 0.1)',
-                tension: 0.4,
-                fill: true
-            }]
+  // Usage Chart
+  const usageCtx = document.getElementById('usageChart').getContext('2d');
+  usageChart = new Chart(usageCtx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        {
+          label: 'Lần mở/giờ',
+          data: [],
+          borderColor: '#667eea',
+          backgroundColor: 'rgba(102, 126, 234, 0.1)',
+          tension: 0.4,
+          fill: true,
         },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: {
-                    display: false
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true
-                }
-            }
-        }
-    });
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true } },
+    },
+  });
 
-    // Status Distribution Chart
-    const statusCtx = document.getElementById('statusChart').getContext('2d');
-    statusChart = new Chart(statusCtx, {
-        type: 'doughnut',
-        data: {
-            labels: ['Mở', 'Đóng', 'Đang mở', 'Đang đóng'],
-            datasets: [{
-                data: [0, 0, 0, 0],
-                backgroundColor: [
-                    '#48bb78',
-                    '#f56565',
-                    '#ed8936',
-                    '#ed8936'
-                ]
-            }]
+  // Status Distribution Chart
+  const statusCtx = document.getElementById('statusChart').getContext('2d');
+  statusChart = new Chart(statusCtx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Mở', 'Đóng', 'Đang mở', 'Đang đóng'],
+      datasets: [
+        {
+          data: [0, 0, 0, 0],
+          backgroundColor: ['#48bb78', '#f56565', '#ed8936', '#ed8936'],
         },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: {
-                    position: 'bottom'
-                }
-            }
-        }
-    });
+      ],
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom' } } },
+  });
 
-    // Peak Hours Chart
-    const peakCtx = document.getElementById('peakChart').getContext('2d');
-    peakChart = new Chart(peakCtx, {
-        type: 'bar',
-        data: {
-            labels: [],
-            datasets: [{
-                label: 'Sử dụng',
-                data: [],
-                backgroundColor: '#667eea'
-            }]
+  // Peak Hours Chart
+  const peakCtx = document.getElementById('peakChart').getContext('2d');
+  peakChart = new Chart(peakCtx, {
+    type: 'bar',
+    data: {
+      labels: [],
+      datasets: [
+        {
+          label: 'Sử dụng',
+          data: [],
+          backgroundColor: '#667eea',
         },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: {
-                    display: false
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true
-                }
-            }
-        }
-    });
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true } },
+    },
+  });
 
-    // User Activity Chart
-    const userCtx = document.getElementById('userChart').getContext('2d');
-    userChart = new Chart(userCtx, {
-        type: 'area',
-        data: {
-            labels: [],
-            datasets: [{
-                label: 'Hoạt động',
-                data: [],
-                borderColor: '#48bb78',
-                backgroundColor: 'rgba(72, 187, 120, 0.1)',
-                tension: 0.4,
-                fill: true
-            }]
+  // User Activity Chart
+  const userCtx = document.getElementById('userChart').getContext('2d');
+  userChart = new Chart(userCtx, {
+    type: 'area',
+    data: {
+      labels: [],
+      datasets: [
+        {
+          label: 'Hoạt động',
+          data: [],
+          borderColor: '#48bb78',
+          backgroundColor: 'rgba(72, 187, 120, 0.1)',
+          tension: 0.4,
+          fill: true,
         },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: {
-                    display: false
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true
-                }
-            }
-        }
-    });
-}
-
-// Start Firebase listener
-function startFirebaseListener() {
-    console.log('📡 Starting Firebase listener...');
-    
-    // Listen to locker status
-    const lockerRef = ref(database, '/Locker1');
-    onValue(lockerRef, (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-            updateAnalytics(data);
-        }
-    });
-
-    // Listen to activity log
-    const activityRef = ref(database, '/analytics/activity');
-    onValue(activityRef, (snapshot) => {
-        const activities = snapshot.val();
-        if (activities) {
-            updateRecentActivity(activities);
-        }
-    });
+      ],
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true } },
+    },
+  });
 }
 
 // Update analytics data
 function updateAnalytics(data) {
-    const currentStatus = data.current_status || 'closed';
-    const timestamp = Date.now();
-    
-    // Update status distribution
-    analyticsData.statusDistribution[currentStatus] = (analyticsData.statusDistribution[currentStatus] || 0) + 1;
-    
-    // Update hourly usage
-    const hour = new Date().getHours();
-    analyticsData.hourlyUsage[hour] = (analyticsData.hourlyUsage[hour] || 0) + 1;
-    
-    // Update peak hours
-    analyticsData.peakHours[hour] = (analyticsData.peakHours[hour] || 0) + 1;
-    
-    // Log activity
-    logActivity({
-        action: currentStatus,
-        timestamp: timestamp,
-        user: 'system',
-        type: 'status_change'
-    });
-    
-    // Update dashboard
-    updateDashboard();
-}
+  const currentStatus = data.current_status || 'closed';
+  const hour = new Date().getHours();
 
-// Log activity
-function logActivity(activity) {
-    const activityRef = ref(database, '/analytics/activity');
-    push(activityRef, activity);
+  analyticsData.statusDistribution[currentStatus] = (analyticsData.statusDistribution[currentStatus] || 0) + 1;
+  analyticsData.hourlyUsage[hour] = (analyticsData.hourlyUsage[hour] || 0) + 1;
+  analyticsData.peakHours[hour] = (analyticsData.peakHours[hour] || 0) + 1;
+
+  updateDashboard();
 }
 
 // Update dashboard display
 function updateDashboard() {
-    // Update stats cards
-    document.getElementById('totalOpens').textContent = analyticsData.totalOpens;
-    document.getElementById('avgUsageTime').textContent = analyticsData.avgUsageTime + 'm';
-    document.getElementById('activeUsers').textContent = analyticsData.activeUsers;
-    document.getElementById('systemErrors').textContent = analyticsData.systemErrors;
-    
-    // Update charts
-    updateUsageChart();
-    updateStatusChart();
-    updatePeakChart();
-    updateUserChart();
-    
-    // Update system status
-    updateSystemStatus();
+  document.getElementById('totalOpens').textContent = analyticsData.totalOpens;
+  document.getElementById('avgUsageTime').textContent = analyticsData.avgUsageTime + 'm';
+  document.getElementById('activeUsers').textContent = analyticsData.activeUsers;
+  document.getElementById('systemErrors').textContent = analyticsData.systemErrors;
+
+  updateUsageChart();
+  updateStatusChart();
+  updatePeakChart();
+  updateUserChart();
+
+  updateSystemStatus();
 }
 
 // Update usage chart
 function updateUsageChart() {
-    const timeRange = document.getElementById('timeRange').value;
-    const hours = [];
-    const data = [];
-    
-    if (timeRange === '24h') {
-        for (let i = 0; i < 24; i++) {
-            hours.push(i + ':00');
-            data.push(analyticsData.hourlyUsage[i] || 0);
-        }
+  const timeRange = document.getElementById('timeRange').value;
+  const hours = [];
+  const data = [];
+
+  if (timeRange === '24h') {
+    for (let i = 0; i < 24; i++) {
+      hours.push(i + ':00');
+      data.push(analyticsData.hourlyUsage[i] || 0);
     }
-    
-    usageChart.data.labels = hours;
-    usageChart.data.datasets[0].data = data;
-    usageChart.update();
+  }
+
+  usageChart.data.labels = hours;
+  usageChart.data.datasets[0].data = data;
+  usageChart.update();
 }
 
 // Update status chart
 function updateStatusChart() {
-    const statusData = [
-        analyticsData.statusDistribution.open || 0,
-        analyticsData.statusDistribution.closed || 0,
-        analyticsData.statusDistribution.opening || 0,
-        analyticsData.statusDistribution.closing || 0
-    ];
-    
-    statusChart.data.datasets[0].data = statusData;
-    statusChart.update();
+  const statusData = [
+    analyticsData.statusDistribution.open || 0,
+    analyticsData.statusDistribution.closed || 0,
+    analyticsData.statusDistribution.opening || 0,
+    analyticsData.statusDistribution.closing || 0,
+  ];
+
+  statusChart.data.datasets[0].data = statusData;
+  statusChart.update();
 }
 
 // Update peak hours chart
 function updatePeakChart() {
-    const hours = [];
-    const data = [];
-    
-    for (let i = 0; i < 24; i++) {
-        hours.push(i + ':00');
-        data.push(analyticsData.peakHours[i] || 0);
-    }
-    
-    peakChart.data.labels = hours;
-    peakChart.data.datasets[0].data = data;
-    peakChart.update();
+  const hours = [];
+  const data = [];
+
+  for (let i = 0; i < 24; i++) {
+    hours.push(i + ':00');
+    data.push(analyticsData.peakHours[i] || 0);
+  }
+
+  peakChart.data.labels = hours;
+  peakChart.data.datasets[0].data = data;
+  peakChart.update();
 }
 
-// Update user activity chart
+// Update user activity chart (mocked visual for now)
 function updateUserChart() {
-    const labels = [];
-    const data = [];
-    
-    // Generate last 7 days
-    for (let i = 6; i >= 0; i--) {
-        const date = new Date();
-        date.setDate(date.getDate() - i);
-        labels.push(date.toLocaleDateString('vi-VN'));
-        data.push(Math.floor(Math.random() * 20) + 5); // Mock data
-    }
-    
-    userChart.data.labels = labels;
-    userChart.data.datasets[0].data = data;
-    userChart.update();
+  const labels = [];
+  const data = [];
+  for (let i = 6; i >= 0; i--) {
+    const date = new Date();
+    date.setDate(date.getDate() - i);
+    labels.push(date.toLocaleDateString('vi-VN'));
+    data.push(Math.floor(Math.random() * 20) + 5);
+  }
+  userChart.data.labels = labels;
+  userChart.data.datasets[0].data = data;
+  userChart.update();
 }
 
 // Update recent activity
 function updateRecentActivity(activities) {
-    const activityList = document.getElementById('recentActivity');
-    activityList.innerHTML = '';
-    
-    // Sort activities by timestamp
-    const sortedActivities = Object.values(activities).sort((a, b) => b.timestamp - a.timestamp);
-    
-    // Show last 10 activities
-    sortedActivities.slice(0, 10).forEach(activity => {
-        const activityItem = document.createElement('div');
-        activityItem.className = 'activity-item';
-        
-        const time = new Date(activity.timestamp).toLocaleString('vi-VN');
-        const icon = getActivityIcon(activity.type);
-        
-        activityItem.innerHTML = `
-            <span class="time">${time}</span>
-            <span class="action">${icon} ${activity.action}</span>
-            <span class="user">${activity.user}</span>
-        `;
-        
-        activityList.appendChild(activityItem);
-    });
+  const activityList = document.getElementById('recentActivity');
+  activityList.innerHTML = '';
+  const sortedActivities = Object.values(activities).sort((a, b) => b.timestamp - a.timestamp);
+  sortedActivities.slice(0, 10).forEach((activity) => {
+    const activityItem = document.createElement('div');
+    activityItem.className = 'activity-item';
+    const time = new Date(activity.timestamp).toLocaleString('vi-VN');
+    const icon = getActivityIcon(activity.type);
+    activityItem.innerHTML = `
+      <span class="time">${time}</span>
+      <span class="action">${icon} ${activity.action}</span>
+      <span class="user">${activity.user}</span>
+    `;
+    activityList.appendChild(activityItem);
+  });
 }
 
-// Get activity icon
 function getActivityIcon(type) {
-    switch(type) {
-        case 'status_change': return '🔄';
-        case 'user_action': return '👤';
-        case 'system': return '⚙️';
-        case 'error': return '❌';
-        default: return 'ℹ️';
-    }
+  switch (type) {
+    case 'status_change':
+      return '🔄';
+    case 'user_action':
+      return '👤';
+    case 'system':
+      return '⚙️';
+    case 'error':
+      return '❌';
+    default:
+      return 'ℹ️';
+  }
 }
 
-// Update system status
 function updateSystemStatus() {
-    // Mock system status - in real app, this would check actual system health
-    document.getElementById('firebaseStatus').textContent = 'Online';
-    document.getElementById('firebaseStatus').className = 'status-value online';
-    
-    document.getElementById('esp32Status').textContent = 'Online';
-    document.getElementById('esp32Status').className = 'status-value online';
-    
-    document.getElementById('servoStatus').textContent = 'OK';
-    document.getElementById('servoStatus').className = 'status-value online';
-    
-    document.getElementById('ledStatus').textContent = 'OK';
-    document.getElementById('ledStatus').className = 'status-value online';
+  const el = document.getElementById('firebaseStatus');
+  if (el) {
+    el.textContent = isAuthenticated() ? 'Online' : 'Offline';
+    el.className = 'status-value ' + (isAuthenticated() ? 'online' : 'offline');
+  }
+  const esp = document.getElementById('esp32Status');
+  if (esp) {
+    esp.textContent = 'Online';
+    esp.className = 'status-value online';
+  }
+  const servo = document.getElementById('servoStatus');
+  if (servo) {
+    servo.textContent = 'OK';
+    servo.className = 'status-value online';
+  }
+  const led = document.getElementById('ledStatus');
+  if (led) {
+    led.textContent = 'OK';
+    led.className = 'status-value online';
+  }
 }
 
-// Load historical data
-function loadHistoricalData() {
-    console.log('📊 Loading historical data...');
-    
-    // Mock historical data
-    analyticsData.totalOpens = 156;
-    analyticsData.avgUsageTime = 8.5;
-    analyticsData.activeUsers = 12;
-    analyticsData.systemErrors = 3;
-    
-    // Generate mock hourly data
-    for (let i = 0; i < 24; i++) {
-        analyticsData.hourlyUsage[i] = Math.floor(Math.random() * 20) + 5;
-        analyticsData.peakHours[i] = Math.floor(Math.random() * 15) + 3;
-    }
-    
-    // Generate mock status distribution
-    analyticsData.statusDistribution = {
-        open: 45,
-        closed: 120,
-        opening: 8,
-        closing: 7
-    };
-    
-    updateDashboard();
-}
-
-// Export report
-function exportReport() {
-    console.log('📄 Exporting report...');
-    
+async function exportReport() {
+  console.log('📄 Exporting report...');
+  try {
+    const res = await authFetch('/api/analytics');
+    const apiData = res.ok ? await res.json() : null;
     const reportData = {
-        timestamp: new Date().toISOString(),
-        stats: {
-            totalOpens: analyticsData.totalOpens,
-            avgUsageTime: analyticsData.avgUsageTime,
-            activeUsers: analyticsData.activeUsers,
-            systemErrors: analyticsData.systemErrors
-        },
-        hourlyUsage: analyticsData.hourlyUsage,
-        statusDistribution: analyticsData.statusDistribution,
-        peakHours: analyticsData.peakHours
+      timestamp: new Date().toISOString(),
+      stats: apiData?.stats || {
+        totalOpens: analyticsData.totalOpens,
+        avgUsageTime: analyticsData.avgUsageTime,
+        activeUsers: analyticsData.activeUsers,
+        systemErrors: analyticsData.systemErrors,
+      },
+      hourlyUsage: apiData?.hourlyUsage || analyticsData.hourlyUsage,
+      statusDistribution: apiData?.statusDistribution || analyticsData.statusDistribution,
+      peakHours: apiData?.peakHours || analyticsData.peakHours,
     };
-    
-    // Create and download JSON file
     const dataStr = JSON.stringify(reportData, null, 2);
-    const dataBlob = new Blob([dataStr], {type: 'application/json'});
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(dataBlob);
-    
     const link = document.createElement('a');
     link.href = url;
     link.download = `locker-report-${new Date().toISOString().split('T')[0]}.json`;
     link.click();
-    
     URL.revokeObjectURL(url);
-    
-    // Log export activity
-    logActivity({
-        action: 'Report exported',
-        timestamp: Date.now(),
-        user: 'admin',
-        type: 'user_action'
-    });
+    try {
+      await authFetch('/api/activity', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'Report exported', type: 'user_action' }),
+      });
+    } catch {}
+  } catch (e) {
+    console.error('Export failed', e);
+  }
 }
 
-// Refresh data
-function refreshData() {
-    console.log('🔄 Refreshing data...');
-    loadHistoricalData();
-    
-    // Log refresh activity
-    logActivity({
-        action: 'Data refreshed',
-        timestamp: Date.now(),
-        user: 'admin',
-        type: 'user_action'
+async function refreshData() {
+  console.log('🔄 Refreshing data...');
+  await loadFromBackend();
+  try {
+    await authFetch('/api/activity', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'Data refreshed', type: 'user_action' }),
     });
+  } catch {}
 }
 
-// Clear activity
-function clearActivity() {
-    if (confirm('Bạn có chắc muốn xóa tất cả hoạt động?')) {
-        const activityRef = ref(database, '/analytics/activity');
-        set(activityRef, null);
-        
-        document.getElementById('recentActivity').innerHTML = '';
-        
-        logActivity({
-            action: 'Activity cleared',
-            timestamp: Date.now(),
-            user: 'admin',
-            type: 'user_action'
-        });
+async function clearActivity() {
+  if (confirm('Bạn có chắc muốn xóa tất cả hoạt động?')) {
+    try {
+      await authFetch('/api/activity/clear', { method: 'POST' });
+    } catch (e) {
+      console.error(e);
     }
+    document.getElementById('recentActivity').innerHTML = '';
+    try {
+      await authFetch('/api/activity', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'Activity cleared', type: 'user_action' }),
+      });
+    } catch {}
+  }
 }
 
-// Update charts when time range changes
 function updateCharts() {
-    updateUsageChart();
+  updateUsageChart();
 }
 
+function setupAuthUI() {
+  const loginBtn = document.getElementById('loginBtn');
+  const logoutBtn = document.getElementById('logoutBtn');
+  const usernameInput = document.getElementById('usernameInput');
+  const passwordInput = document.getElementById('passwordInput');
+  const currentUser = document.getElementById('currentUser');
+
+  function render() {
+    if (isAuthenticated()) {
+      const user = getCurrentUser();
+      currentUser.textContent = user ? `${user.username} (${user.role})` : 'Đã đăng nhập';
+      logoutBtn.style.display = 'inline-block';
+      usernameInput.style.display = 'none';
+      passwordInput.style.display = 'none';
+      loginBtn.style.display = 'none';
+    } else {
+      currentUser.textContent = '';
+      logoutBtn.style.display = 'none';
+      usernameInput.style.display = 'inline-block';
+      passwordInput.style.display = 'inline-block';
+      loginBtn.style.display = 'inline-block';
+    }
+    updateSystemStatus();
+  }
+
+  render();
+
+  loginBtn.addEventListener('click', async () => {
+    const username = usernameInput.value.trim();
+    const password = passwordInput.value;
+    if (!username || !password) return alert('Nhập tài khoản và mật khẩu');
+    try {
+      await login(username, password);
+      render();
+      await loadFromBackend();
+    } catch (e) {
+      alert('Đăng nhập thất bại: ' + e.message);
+    }
+  });
+
+  logoutBtn.addEventListener('click', () => {
+    logout();
+    render();
+  });
+}
+
+// Expose functions used by inline HTML
+window.exportReport = exportReport;
+window.refreshData = refreshData;
+window.clearActivity = clearActivity;
+window.updateCharts = updateCharts;

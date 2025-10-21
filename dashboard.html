@@ -15,6 +15,13 @@
         <header class="header">
             <h1><i class="fas fa-chart-line"></i> Dashboard Analytics</h1>
             <div class="header-controls">
+                <div class="auth-controls" style="display:flex; gap:6px; align-items:center; margin-right:8px;">
+                    <input id="usernameInput" type="text" placeholder="Tài khoản" style="padding:6px;" />
+                    <input id="passwordInput" type="password" placeholder="Mật khẩu" style="padding:6px;" />
+                    <button id="loginBtn" class="btn">Đăng nhập</button>
+                    <div id="currentUser" style="margin-left:8px; font-weight:600;"></div>
+                    <button id="logoutBtn" class="btn btn-clear" style="display:none;">Đăng xuất</button>
+                </div>
                 <button onclick="exportReport()" class="btn btn-export">
                     <i class="fas fa-download"></i> Export Report
                 </button>
@@ -129,8 +136,8 @@
             <h3><i class="fas fa-server"></i> Trạng thái hệ thống</h3>
             <div class="status-grid">
                 <div class="status-item">
-                    <span class="status-label">Firebase:</span>
-                    <span id="firebaseStatus" class="status-value online">Online</span>
+                    <span class="status-label">Server:</span>
+                    <span id="firebaseStatus" class="status-value offline">Offline</span>
                 </div>
                 <div class="status-item">
                     <span class="status-label">ESP32:</span>
@@ -148,37 +155,7 @@
         </div>
     </div>
 
-    <!-- Firebase SDK v12 -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
-        import { getDatabase, ref, onValue, set, get, push } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-database.js";
-
-        // Firebase configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyBqfcOprdE5MT6m1yfXmRDtCzngtX86-7U",
-            authDomain: "minhquang-36ee2.firebaseapp.com",
-            databaseURL: "https://minhquang-36ee2-default-rtdb.firebaseio.com",
-            projectId: "minhquang-36ee2",
-            storageBucket: "minhquang-36ee2.firebasestorage.app",
-            messagingSenderId: "986858991599",
-            appId: "1:986858991599:web:53c36493204131a10c501a"
-        };
-
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const database = getDatabase(app);
-
-        // Make functions available globally
-        window.database = database;
-        window.ref = ref;
-        window.onValue = onValue;
-        window.set = set;
-        window.get = get;
-        window.push = push;
-
-        console.log('✅ Dashboard Firebase initialized');
-    </script>
-    <script src="dashboard.js"></script>
+    <script type="module" src="dashboard.js"></script>
 </body>
 </html>
 

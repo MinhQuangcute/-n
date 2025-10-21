@@ -1,26 +1,5 @@
-// Firebase v12 - Database functions are imported in HTML
-// Wait for Firebase to be initialized
-let database, ref, onValue, set, get;
-
-// Wait for Firebase to be ready
-function waitForFirebase() {
-    return new Promise((resolve) => {
-        const checkFirebase = () => {
-            if (window.database && window.ref && window.onValue && window.set && window.get) {
-                database = window.database;
-                ref = window.ref;
-                onValue = window.onValue;
-                set = window.set;
-                get = window.get;
-                console.log('✅ Firebase v12 đã sẵn sàng');
-                resolve();
-            } else {
-                setTimeout(checkFirebase, 100);
-            }
-        };
-        checkFirebase();
-    });
-}
+// Node.js backend integration with JWT auth
+import { login, logout, isAuthenticated, getCurrentUser, authFetch } from './auth.js';
 
 // Global variables
 let isConnected = false;
@@ -43,12 +22,18 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     // Add initial activity log
     addActivityLog('Hệ thống khởi động', 'system');
-    
-    // Wait for Firebase to be ready
-    await waitForFirebase();
-    
-    // Start listening to Firebase
-    startFirebaseListener();
+
+    // Wire auth controls
+    setupAuthUI();
+
+    // Try fetch initial status if authenticated
+    if (isAuthenticated()) {
+        await refreshStatus();
+        isConnected = true;
+        updateConnectionStatus(true);
+    } else {
+        updateConnectionStatus(false);
+    }
     
     // Update time every second
     setInterval(updateTime, 1000);
@@ -57,58 +42,18 @@ document.addEventListener('DOMContentLoaded', async function() {
     setInterval(checkConnectionStatus, 5000);
 });
 
-// Firebase listener
-function startFirebaseListener() {
-    console.log('📡 Bắt đầu lắng nghe Firebase...');
-    
+// Backend: fetch current status
+async function refreshStatus() {
     try {
-        // Listen to locker status changes
-        const lockerRef = ref(database, '/Locker1');
-        
-        onValue(lockerRef, (snapshot) => {
-            const data = snapshot.val();
-            console.log('📨 Nhận dữ liệu từ Firebase:', data);
-            if (data) {
-                updateLockerStatus(data);
-                isConnected = true;
-                updateConnectionStatus(true);
-                addActivityLog('Kết nối Firebase thành công', 'success');
-            } else {
-                console.log('⚠️ Không có dữ liệu từ Firebase');
-                addActivityLog('Không có dữ liệu từ Firebase', 'error');
-            }
-        }, (error) => {
-            console.error('❌ Lỗi Firebase:', error);
-            isConnected = false;
-            updateConnectionStatus(false);
-            addActivityLog('Lỗi kết nối Firebase: ' + error.message, 'error');
-        });
-        
-        // Test connection
-        const connectedRef = ref(database, '.info/connected');
-        onValue(connectedRef, (snapshot) => {
-            const connected = snapshot.val();
-            console.log('🔗 Trạng thái kết nối Firebase:', connected);
-            if (connected) {
-                addActivityLog('Firebase đã kết nối', 'success');
-            } else {
-                addActivityLog('Firebase mất kết nối', 'error');
-            }
-        });
-        
-        // Listen to status changes specifically
-        const statusRef = ref(database, '/Locker1/status');
-        onValue(statusRef, (snapshot) => {
-            const status = snapshot.val();
-            if (status && status !== currentLockerStatus) {
-                console.log('📨 Nhận lệnh mới:', status);
-                addActivityLog(`Nhận lệnh: ${status}`, 'command');
-            }
-        });
-        
-    } catch (error) {
-        console.error('❌ Lỗi khởi tạo listener:', error);
-        addActivityLog('Lỗi khởi tạo listener: ' + error.message, 'error');
+        const res = await authFetch('/api/locker/status');
+        if (!res.ok) throw new Error('Network error');
+        const data = await res.json();
+        updateLockerStatus(data);
+    } catch (e) {
+        console.error('❌ Lỗi tải trạng thái:', e);
+        addActivityLog('Lỗi tải trạng thái: ' + e.message, 'error');
+        isConnected = false;
+        updateConnectionStatus(false);
     }
 }
 
@@ -164,14 +109,11 @@ function updateButtonStates(status) {
 }
 
 // Control locker function
-function controlLocker(action) {
+async function controlLocker(action) {
     console.log(`🎮 Gửi lệnh: ${action}`);
     
-    // Check if Firebase is ready
-    if (!database || !ref || !set) {
-        console.error('❌ Firebase chưa sẵn sàng');
-        alert('⚠️ Firebase chưa sẵn sàng! Vui lòng đợi và thử lại.');
-        addActivityLog('Firebase chưa sẵn sàng', 'error');
+    if (!isAuthenticated()) {
+        alert('⚠️ Vui lòng đăng nhập để điều khiển tủ.');
         return;
     }
     
@@ -184,42 +126,34 @@ function controlLocker(action) {
         closeBtn.disabled = true;
     }
     
-    // Send command to Firebase
     try {
-        const statusRef = ref(database, '/Locker1/status');
-        set(statusRef, action)
-            .then(() => {
-                console.log(`✅ Đã gửi lệnh ${action} thành công`);
-                addActivityLog(`Gửi lệnh: ${action}`, 'user');
-                
-                // Reset button after 3 seconds
-                setTimeout(() => {
-                    resetButtons();
-                }, 3000);
-            })
-            .catch((error) => {
-                console.error('❌ Lỗi gửi lệnh:', error);
-                let errorMessage = 'Không thể gửi lệnh!';
-                
-                if (error.code === 'PERMISSION_DENIED') {
-                    errorMessage = 'Lỗi quyền truy cập! Kiểm tra Firebase Rules.';
-                } else if (error.code === 'NETWORK_ERROR') {
-                    errorMessage = 'Lỗi mạng! Kiểm tra kết nối internet.';
-                } else if (error.code === 'UNAVAILABLE') {
-                    errorMessage = 'Firebase không khả dụng! Thử lại sau.';
-                }
-                
-                alert('❌ ' + errorMessage);
-                addActivityLog('Lỗi gửi lệnh: ' + error.message, 'error');
-                resetButtons();
-            });
+        const res = await authFetch('/api/locker/command', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action })
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.error || 'Không thể gửi lệnh');
+        }
+        const data = await res.json();
+        console.log(`✅ Đã gửi lệnh ${action} thành công`);
+        addActivityLog(`Gửi lệnh: ${action}`, 'user');
+        updateLockerStatus(data.status);
     } catch (error) {
-        console.error('❌ Lỗi khởi tạo gửi lệnh:', error);
-        alert('❌ Lỗi khởi tạo gửi lệnh! Vui lòng thử lại.');
-        addActivityLog('Lỗi khởi tạo gửi lệnh: ' + error.message, 'error');
-        resetButtons();
+        console.error('❌ Lỗi gửi lệnh:', error);
+        alert('❌ ' + error.message);
+        addActivityLog('Lỗi gửi lệnh: ' + error.message, 'error');
+    } finally {
+        // Reset button after 3 seconds
+        setTimeout(() => {
+            resetButtons();
+        }, 3000);
     }
 }
+
+// Expose functions used by inline HTML handlers
+window.controlLocker = controlLocker;
 
 // Reset buttons
 function resetButtons() {
@@ -233,13 +167,13 @@ function resetButtons() {
 function updateConnectionStatus(connected) {
     if (connected) {
         connectionStatus.className = 'status-dot online';
-        connectionText.textContent = 'Đã kết nối';
-        wifiStatus.textContent = 'Kết nối tốt';
+        connectionText.textContent = 'Đã kết nối server';
+        wifiStatus.textContent = 'Kết nối server tốt';
         wifiStatus.style.color = '#2f855a';
     } else {
         connectionStatus.className = 'status-dot offline';
-        connectionText.textContent = 'Mất kết nối';
-        wifiStatus.textContent = 'Mất kết nối';
+        connectionText.textContent = 'Mất kết nối server';
+        wifiStatus.textContent = 'Mất kết nối server';
         wifiStatus.style.color = '#c53030';
     }
 }
@@ -353,34 +287,68 @@ document.addEventListener('keydown', function(event) {
 addActivityLog('Phím tắt: Ctrl+O (Mở), Ctrl+C (Đóng)', 'system');
 
 // Debug function
-function debugFirebase() {
-    console.log('🔍 Debug Firebase...');
-    console.log('Database:', database);
-    console.log('Ref function:', ref);
-    console.log('Set function:', set);
-    console.log('OnValue function:', onValue);
-    
-    // Test simple write
+async function debugServer() {
+    if (!isAuthenticated()) return;
     try {
-        const debugRef = ref(database, '/debug');
-        set(debugRef, { 
-            test: true, 
-            time: Date.now(),
-            message: 'Debug test from web'
-        })
-        .then(() => {
-            console.log('✅ Debug write OK');
-            addActivityLog('Debug write thành công', 'success');
-        })
-        .catch(err => {
-            console.error('❌ Debug write failed:', err);
-            addActivityLog('Debug write thất bại: ' + err.message, 'error');
-        });
-    } catch (error) {
-        console.error('❌ Debug error:', error);
-        addActivityLog('Debug error: ' + error.message, 'error');
+        await refreshStatus();
+        addActivityLog('Kết nối server thành công', 'success');
+    } catch (e) {
+        // already handled
     }
 }
-
 // Chạy debug sau 3 giây
-setTimeout(debugFirebase, 3000);
+setTimeout(debugServer, 3000);
+
+function setupAuthUI() {
+    const loginBtn = document.getElementById('loginBtn');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const usernameInput = document.getElementById('usernameInput');
+    const passwordInput = document.getElementById('passwordInput');
+    const currentUser = document.getElementById('currentUser');
+
+    function renderAuth() {
+        if (isAuthenticated()) {
+            const user = getCurrentUser();
+            currentUser.textContent = user ? `${user.username} (${user.role})` : 'Đã đăng nhập';
+            logoutBtn.style.display = 'inline-block';
+            usernameInput.style.display = 'none';
+            passwordInput.style.display = 'none';
+            loginBtn.style.display = 'none';
+        } else {
+            currentUser.textContent = '';
+            logoutBtn.style.display = 'none';
+            usernameInput.style.display = 'inline-block';
+            passwordInput.style.display = 'inline-block';
+            loginBtn.style.display = 'inline-block';
+        }
+    }
+
+    renderAuth();
+
+    loginBtn.addEventListener('click', async () => {
+        const username = usernameInput.value.trim();
+        const password = passwordInput.value;
+        if (!username || !password) {
+            alert('Vui lòng nhập tài khoản và mật khẩu');
+            return;
+        }
+        try {
+            await login(username, password);
+            renderAuth();
+            await refreshStatus();
+            isConnected = true;
+            updateConnectionStatus(true);
+            addActivityLog('Đăng nhập thành công', 'success');
+        } catch (e) {
+            alert('Đăng nhập thất bại: ' + e.message);
+        }
+    });
+
+    logoutBtn.addEventListener('click', () => {
+        logout();
+        renderAuth();
+        isConnected = false;
+        updateConnectionStatus(false);
+        addActivityLog('Đã đăng xuất', 'system');
+    });
+}
