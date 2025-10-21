@@ -1,21 +1,16 @@
 // Chatbot JavaScript - Minimal working version
 
-let database, ref, onValue, set, get, push;
-
-// Wait for Firebase objects that are exposed from chatbot.html inline module
-(function waitForFirebase() {
-	if (window.database && window.ref && window.onValue && window.set && window.get && window.push) {
-		database = window.database;
-		ref = window.ref;
-		onValue = window.onValue;
-		set = window.set;
-		get = window.get;
-		push = window.push;
-		console.log('✅ Chatbot Firebase ready');
-		initChatbot();
-		return;
-	}
-	setTimeout(waitForFirebase, 100);
+// Wait for auth instead of Firebase
+(function waitForAuth() {
+    if (window.auth && auth.isLoggedIn()) {
+        initChatbot();
+        return;
+    }
+    if (window.auth) {
+        auth.onAuthReady(initChatbot);
+        return;
+    }
+    setTimeout(waitForAuth, 100);
 })();
 
 function initChatbot() {
@@ -96,24 +91,24 @@ function escapeHtml(s) {
 }
 
 function commandLocker(action) {
-	if (!database || !ref || !set) {
-		botReply('Firebase chưa sẵn sàng. Vui lòng thử lại.');
-		return;
-	}
-	set(ref(database, '/Locker1/status'), action).catch((err) => {
-		console.error('Command error:', err);
-		botReply('Gửi lệnh thất bại: ' + (err && err.message ? err.message : 'Unknown error'));
-	});
+    if (!auth || !auth.isLoggedIn()) {
+        botReply('Vui lòng đăng nhập trước khi điều khiển.');
+        return;
+    }
+    auth.apiFetch('/locker/command', { method: 'POST', body: JSON.stringify({ action }) })
+        .catch((err) => {
+            console.error('Command error:', err);
+            botReply('Gửi lệnh thất bại: ' + (err && err.message ? err.message : 'Unknown error'));
+        });
 }
 
 async function readStatus() {
-	if (!database || !ref || !get) return null;
-	try {
-		const snap = await get(ref(database, '/Locker1/current_status'));
-		return snap.exists() ? snap.val() : null;
-	} catch (e) {
-		console.error('Read status error:', e);
-		return null;
-	}
+    try {
+        const s = await auth.apiFetch('/locker/status');
+        return s && s.status;
+    } catch (e) {
+        console.error('Read status error:', e);
+        return null;
+    }
 }
 

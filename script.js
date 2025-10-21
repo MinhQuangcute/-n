@@ -1,26 +1,15 @@
-// Firebase v12 - Database functions are imported in HTML
-// Wait for Firebase to be initialized
-let database, ref, onValue, set, get;
-
-// Wait for Firebase to be ready
-function waitForFirebase() {
-    return new Promise((resolve) => {
-        const checkFirebase = () => {
-            if (window.database && window.ref && window.onValue && window.set && window.get) {
-                database = window.database;
-                ref = window.ref;
-                onValue = window.onValue;
-                set = window.set;
-                get = window.get;
-                console.log('✅ Firebase v12 đã sẵn sàng');
-                resolve();
-            } else {
-                setTimeout(checkFirebase, 100);
-            }
-        };
-        checkFirebase();
-    });
-}
+// Backend API client
+const API = {
+    async getStatus() {
+        return await auth.apiFetch('/locker/status');
+    },
+    async command(action) {
+        return await auth.apiFetch('/locker/command', {
+            method: 'POST',
+            body: JSON.stringify({ action })
+        });
+    }
+};
 
 // Global variables
 let isConnected = false;
@@ -44,11 +33,11 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Add initial activity log
     addActivityLog('Hệ thống khởi động', 'system');
     
-    // Wait for Firebase to be ready
-    await waitForFirebase();
+    // Wait for auth
+    await new Promise((r) => auth.onAuthReady(r));
     
-    // Start listening to Firebase
-    startFirebaseListener();
+    // Start polling backend
+    startBackendPolling();
     
     // Update time every second
     setInterval(updateTime, 1000);
@@ -57,59 +46,27 @@ document.addEventListener('DOMContentLoaded', async function() {
     setInterval(checkConnectionStatus, 5000);
 });
 
-// Firebase listener
-function startFirebaseListener() {
-    console.log('📡 Bắt đầu lắng nghe Firebase...');
-    
-    try {
-        // Listen to locker status changes
-        const lockerRef = ref(database, '/Locker1');
-        
-        onValue(lockerRef, (snapshot) => {
-            const data = snapshot.val();
-            console.log('📨 Nhận dữ liệu từ Firebase:', data);
-            if (data) {
-                updateLockerStatus(data);
-                isConnected = true;
-                updateConnectionStatus(true);
-                addActivityLog('Kết nối Firebase thành công', 'success');
-            } else {
-                console.log('⚠️ Không có dữ liệu từ Firebase');
-                addActivityLog('Không có dữ liệu từ Firebase', 'error');
-            }
-        }, (error) => {
-            console.error('❌ Lỗi Firebase:', error);
+// Backend polling listener
+function startBackendPolling() {
+    console.log('📡 Bắt đầu truy vấn backend...');
+    const fetchAndUpdate = async () => {
+        try {
+            const data = await API.getStatus();
+            updateLockerStatus({
+                current_status: data.status,
+                last_update: data.last_update
+            });
+            isConnected = true;
+            updateConnectionStatus(true);
+        } catch (error) {
+            console.error('❌ Backend error:', error);
             isConnected = false;
             updateConnectionStatus(false);
-            addActivityLog('Lỗi kết nối Firebase: ' + error.message, 'error');
-        });
-        
-        // Test connection
-        const connectedRef = ref(database, '.info/connected');
-        onValue(connectedRef, (snapshot) => {
-            const connected = snapshot.val();
-            console.log('🔗 Trạng thái kết nối Firebase:', connected);
-            if (connected) {
-                addActivityLog('Firebase đã kết nối', 'success');
-            } else {
-                addActivityLog('Firebase mất kết nối', 'error');
-            }
-        });
-        
-        // Listen to status changes specifically
-        const statusRef = ref(database, '/Locker1/status');
-        onValue(statusRef, (snapshot) => {
-            const status = snapshot.val();
-            if (status && status !== currentLockerStatus) {
-                console.log('📨 Nhận lệnh mới:', status);
-                addActivityLog(`Nhận lệnh: ${status}`, 'command');
-            }
-        });
-        
-    } catch (error) {
-        console.error('❌ Lỗi khởi tạo listener:', error);
-        addActivityLog('Lỗi khởi tạo listener: ' + error.message, 'error');
-    }
+            addActivityLog('Lỗi kết nối backend: ' + error.message, 'error');
+        }
+    };
+    fetchAndUpdate();
+    setInterval(fetchAndUpdate, 2000);
 }
 
 // Update locker status display
@@ -166,12 +123,9 @@ function updateButtonStates(status) {
 // Control locker function
 function controlLocker(action) {
     console.log(`🎮 Gửi lệnh: ${action}`);
-    
-    // Check if Firebase is ready
-    if (!database || !ref || !set) {
-        console.error('❌ Firebase chưa sẵn sàng');
-        alert('⚠️ Firebase chưa sẵn sàng! Vui lòng đợi và thử lại.');
-        addActivityLog('Firebase chưa sẵn sàng', 'error');
+
+    if (!auth.isLoggedIn()) {
+        alert('⚠️ Vui lòng đăng nhập trước khi điều khiển.');
         return;
     }
     
@@ -184,41 +138,19 @@ function controlLocker(action) {
         closeBtn.disabled = true;
     }
     
-    // Send command to Firebase
-    try {
-        const statusRef = ref(database, '/Locker1/status');
-        set(statusRef, action)
-            .then(() => {
-                console.log(`✅ Đã gửi lệnh ${action} thành công`);
-                addActivityLog(`Gửi lệnh: ${action}`, 'user');
-                
-                // Reset button after 3 seconds
-                setTimeout(() => {
-                    resetButtons();
-                }, 3000);
-            })
-            .catch((error) => {
-                console.error('❌ Lỗi gửi lệnh:', error);
-                let errorMessage = 'Không thể gửi lệnh!';
-                
-                if (error.code === 'PERMISSION_DENIED') {
-                    errorMessage = 'Lỗi quyền truy cập! Kiểm tra Firebase Rules.';
-                } else if (error.code === 'NETWORK_ERROR') {
-                    errorMessage = 'Lỗi mạng! Kiểm tra kết nối internet.';
-                } else if (error.code === 'UNAVAILABLE') {
-                    errorMessage = 'Firebase không khả dụng! Thử lại sau.';
-                }
-                
-                alert('❌ ' + errorMessage);
-                addActivityLog('Lỗi gửi lệnh: ' + error.message, 'error');
-                resetButtons();
-            });
-    } catch (error) {
-        console.error('❌ Lỗi khởi tạo gửi lệnh:', error);
-        alert('❌ Lỗi khởi tạo gửi lệnh! Vui lòng thử lại.');
-        addActivityLog('Lỗi khởi tạo gửi lệnh: ' + error.message, 'error');
+    // Send command to backend
+    API.command(action)
+      .then(() => {
+        console.log(`✅ Đã gửi lệnh ${action} thành công`);
+        addActivityLog(`Gửi lệnh: ${action}`, 'user');
+        setTimeout(() => { resetButtons(); }, 1500);
+      })
+      .catch((error) => {
+        console.error('❌ Lỗi gửi lệnh:', error);
+        alert('❌ Không thể gửi lệnh: ' + (error.message || 'Lỗi'));
+        addActivityLog('Lỗi gửi lệnh: ' + error.message, 'error');
         resetButtons();
-    }
+      });
 }
 
 // Reset buttons
@@ -352,35 +284,4 @@ document.addEventListener('keydown', function(event) {
 // Add keyboard shortcut info
 addActivityLog('Phím tắt: Ctrl+O (Mở), Ctrl+C (Đóng)', 'system');
 
-// Debug function
-function debugFirebase() {
-    console.log('🔍 Debug Firebase...');
-    console.log('Database:', database);
-    console.log('Ref function:', ref);
-    console.log('Set function:', set);
-    console.log('OnValue function:', onValue);
-    
-    // Test simple write
-    try {
-        const debugRef = ref(database, '/debug');
-        set(debugRef, { 
-            test: true, 
-            time: Date.now(),
-            message: 'Debug test from web'
-        })
-        .then(() => {
-            console.log('✅ Debug write OK');
-            addActivityLog('Debug write thành công', 'success');
-        })
-        .catch(err => {
-            console.error('❌ Debug write failed:', err);
-            addActivityLog('Debug write thất bại: ' + err.message, 'error');
-        });
-    } catch (error) {
-        console.error('❌ Debug error:', error);
-        addActivityLog('Debug error: ' + error.message, 'error');
-    }
-}
-
-// Chạy debug sau 3 giây
-setTimeout(debugFirebase, 3000);
+// Remove Firebase debug

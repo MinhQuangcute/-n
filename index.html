@@ -70,6 +70,9 @@
         <div class="settings-panel">
             <h3><i class="fas fa-cog"></i> Cài đặt</h3>
             <div class="setting-item">
+                <div id="authPanel"></div>
+            </div>
+            <div class="setting-item">
                 <label for="autoCloseTime">Thời gian tự đóng (giây):</label>
                 <input type="number" id="autoCloseTime" value="10" min="5" max="60">
             </div>
@@ -80,36 +83,7 @@
         </div>
     </div>
 
-    <!-- Firebase SDK v12 -->
-    <script type="module">
-        // Import the functions you need from the SDKs you need
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
-        import { getDatabase, ref, onValue, set, get } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-database.js";
-
-        // Your web app's Firebase configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyBqfcOprdE5MT6m1yfXmRDtCzngtX86-7U",
-            authDomain: "minhquang-36ee2.firebaseapp.com",
-            databaseURL: "https://minhquang-36ee2-default-rtdb.firebaseio.com",
-            projectId: "minhquang-36ee2",
-            storageBucket: "minhquang-36ee2.firebasestorage.app",
-            messagingSenderId: "986858991599",
-            appId: "1:986858991599:web:53c36493204131a10c501a"
-        };
-
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const database = getDatabase(app);
-
-        // Make database available globally
-        window.database = database;
-        window.ref = ref;
-        window.onValue = onValue;
-        window.set = set;
-        window.get = get;
-
-        console.log('✅ Firebase v12 đã khởi tạo thành công');
-    </script>
+    <script src="auth.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

@@ -1,28 +1,16 @@
 // QR Code Scanner JavaScript
-let database, ref, onValue, set, get, push;
+// Using backend API instead of Firebase
+let push; // placeholder to keep minimal diffs where referenced
 let qrScanner = null;
 let currentCamera = 'environment'; // 'environment' for back camera, 'user' for front camera
 let flashEnabled = false;
 let lastScannedData = null;
 
-// Wait for Firebase to be ready
-function waitForFirebase() {
+// Wait for auth login
+function waitForAuth() {
     return new Promise((resolve) => {
-        const checkFirebase = () => {
-            if (window.database && window.ref && window.onValue && window.set && window.get && window.push) {
-                database = window.database;
-                ref = window.ref;
-                onValue = window.onValue;
-                set = window.set;
-                get = window.get;
-                push = window.push;
-                console.log('✅ QR Scanner Firebase ready');
-                resolve();
-            } else {
-                setTimeout(checkFirebase, 100);
-            }
-        };
-        checkFirebase();
+        if (auth.isLoggedIn()) return resolve();
+        auth.onAuthReady(resolve);
     });
 }
 
@@ -30,7 +18,7 @@ function waitForFirebase() {
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('📱 QR Scanner initializing...');
     
-    await waitForFirebase();
+    await waitForAuth();
     
     // Check if QR Scanner is supported
     if (!QrScanner.hasCamera()) {
@@ -38,8 +26,8 @@ document.addEventListener('DOMContentLoaded', async function() {
         return;
     }
     
-    // Load QR activity history
-    loadQRActivity();
+    // Load QR activity history (from backend later if needed)
+    // loadQRActivity();
     
     console.log('✅ QR Scanner ready');
 });
@@ -137,14 +125,7 @@ function handleQRResult(data) {
     // Show results section
     document.getElementById('scanResults').style.display = 'block';
     
-    // Log activity
-    logQRActivity({
-        action: 'QR Code scanned',
-        data: data,
-        type: qrInfo.type,
-        timestamp: Date.now(),
-        user: 'scanner'
-    });
+    // Log activity could be sent to backend here
     
     // Auto-process if it's a valid access code
     if (qrInfo.type === 'access' || qrInfo.type === 'user') {
@@ -185,14 +166,7 @@ function processQRCode() {
     // Show access control
     showAccessControl(qrInfo);
     
-    // Log processing
-    logQRActivity({
-        action: 'QR Code processed',
-        data: lastScannedData,
-        type: qrInfo.type,
-        timestamp: Date.now(),
-        user: 'system'
-    });
+    // Optionally send to backend activity log
 }
 
 // Show access control interface
@@ -240,25 +214,15 @@ function grantAccess() {
     console.log('✅ Access granted for:', lastScannedData);
     
     // Send command to open locker
-    if (database && set) {
-        set(ref(database, '/Locker1/status'), 'open')
-            .then(() => {
-                console.log('✅ Locker access granted');
-                alert('✅ Đã cấp quyền truy cập! Tủ sẽ mở trong giây lát.');
-                
-                // Log access granted
-                logQRActivity({
-                    action: 'Access granted',
-                    data: lastScannedData,
-                    timestamp: Date.now(),
-                    user: 'admin'
-                });
-            })
-            .catch(error => {
-                console.error('❌ Error granting access:', error);
-                alert('❌ Lỗi khi cấp quyền truy cập!');
-            });
-    }
+    auth.apiFetch('/locker/command', { method: 'POST', body: JSON.stringify({ action: 'open' }) })
+        .then(() => {
+            console.log('✅ Locker access granted');
+            alert('✅ Đã cấp quyền truy cập! Tủ sẽ mở trong giây lát.');
+        })
+        .catch(error => {
+            console.error('❌ Error granting access:', error);
+            alert('❌ Lỗi khi cấp quyền truy cập!');
+        });
     
     // Hide access control
     document.getElementById('accessControl').style.display = 'none';
@@ -270,13 +234,7 @@ function denyAccess() {
     
     alert('❌ Quyền truy cập đã bị từ chối!');
     
-    // Log access denied
-    logQRActivity({
-        action: 'Access denied',
-        data: lastScannedData,
-        timestamp: Date.now(),
-        user: 'admin'
-    });
+    // Optionally send to backend activity log
     
     // Hide access control
     document.getElementById('accessControl').style.display = 'none';
@@ -374,26 +332,10 @@ function goBack() {
     window.location.href = 'index.html';
 }
 
-// Log QR activity
-function logQRActivity(activity) {
-    if (database && push) {
-        const activityRef = ref(database, '/analytics/qr_activity');
-        push(activityRef, activity);
-    }
-}
+// Remove Firebase logging
 
 // Load QR activity history
-function loadQRActivity() {
-    if (database && onValue) {
-        const activityRef = ref(database, '/analytics/qr_activity');
-        onValue(activityRef, (snapshot) => {
-            const activities = snapshot.val();
-            if (activities) {
-                updateQRActivityList(activities);
-            }
-        });
-    }
-}
+function loadQRActivity() {}
 
 // Update QR activity list
 function updateQRActivityList(activities) {

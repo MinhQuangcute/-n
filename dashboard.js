@@ -1,5 +1,5 @@
 // Dashboard Analytics JavaScript
-let database, ref, onValue, set, get, push;
+// Using backend API instead of Firebase
 let usageChart, statusChart, peakChart, userChart;
 let analyticsData = {
     totalOpens: 0,
@@ -14,23 +14,10 @@ let analyticsData = {
 };
 
 // Wait for Firebase to be ready
-function waitForFirebase() {
+function waitForAuth() {
     return new Promise((resolve) => {
-        const checkFirebase = () => {
-            if (window.database && window.ref && window.onValue && window.set && window.get && window.push) {
-                database = window.database;
-                ref = window.ref;
-                onValue = window.onValue;
-                set = window.set;
-                get = window.get;
-                push = window.push;
-                console.log('✅ Dashboard Firebase ready');
-                resolve();
-            } else {
-                setTimeout(checkFirebase, 100);
-            }
-        };
-        checkFirebase();
+        if (auth.isLoggedIn()) return resolve();
+        auth.onAuthReady(resolve);
     });
 }
 
@@ -38,13 +25,13 @@ function waitForFirebase() {
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('📊 Dashboard initializing...');
     
-    await waitForFirebase();
+    await waitForAuth();
     
     // Initialize charts
     initializeCharts();
     
-    // Start listening to Firebase
-    startFirebaseListener();
+    // Start polling backend
+    startBackendListener();
     
     // Load historical data
     loadHistoricalData();
@@ -172,26 +159,20 @@ function initializeCharts() {
 }
 
 // Start Firebase listener
-function startFirebaseListener() {
-    console.log('📡 Starting Firebase listener...');
-    
-    // Listen to locker status
-    const lockerRef = ref(database, '/Locker1');
-    onValue(lockerRef, (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-            updateAnalytics(data);
+function startBackendListener() {
+    console.log('📡 Starting backend polling...');
+    const poll = async () => {
+        try {
+            const status = await auth.apiFetch('/locker/status');
+            updateAnalytics({ current_status: status.status });
+            const activity = await auth.apiFetch('/locker/activity');
+            updateRecentActivity(Object.fromEntries((activity.activity || []).map((a, i) => [i, a])));
+        } catch (e) {
+            console.error('Backend polling error:', e);
         }
-    });
-
-    // Listen to activity log
-    const activityRef = ref(database, '/analytics/activity');
-    onValue(activityRef, (snapshot) => {
-        const activities = snapshot.val();
-        if (activities) {
-            updateRecentActivity(activities);
-        }
-    });
+    };
+    poll();
+    setInterval(poll, 5000);
 }
 
 // Update analytics data
@@ -223,8 +204,7 @@ function updateAnalytics(data) {
 
 // Log activity
 function logActivity(activity) {
-    const activityRef = ref(database, '/analytics/activity');
-    push(activityRef, activity);
+    // Optionally send to backend in future
 }
 
 // Update dashboard display
@@ -443,18 +423,13 @@ function refreshData() {
 
 // Clear activity
 function clearActivity() {
+    if (!auth.isLoggedIn()) return alert('Vui lòng đăng nhập');
     if (confirm('Bạn có chắc muốn xóa tất cả hoạt động?')) {
-        const activityRef = ref(database, '/analytics/activity');
-        set(activityRef, null);
-        
-        document.getElementById('recentActivity').innerHTML = '';
-        
-        logActivity({
-            action: 'Activity cleared',
-            timestamp: Date.now(),
-            user: 'admin',
-            type: 'user_action'
-        });
+        auth.apiFetch('/locker/activity', { method: 'DELETE' })
+          .then(() => {
+            document.getElementById('recentActivity').innerHTML = '';
+          })
+          .catch((e) => alert('Xóa thất bại: ' + (e.message || 'Lỗi')));
     }
 }
 
