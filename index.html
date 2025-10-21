@@ -15,6 +15,9 @@
             <div class="status-indicator">
                 <span id="connectionStatus" class="status-dot offline"></span>
                 <span id="connectionText">Đang kết nối...</span>
+                <button id="configBtn" class="btn" style="margin-left:12px;" title="Cấu hình API" onclick="openConfigModal()">
+                    <i class="fas fa-cog"></i>
+                </button>
             </div>
         </header>
 
@@ -80,36 +83,27 @@
         </div>
     </div>
 
-    <!-- Firebase SDK v12 -->
-    <script type="module">
-        // Import the functions you need from the SDKs you need
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
-        import { getDatabase, ref, onValue, set, get } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-database.js";
-
-        // Your web app's Firebase configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyBqfcOprdE5MT6m1yfXmRDtCzngtX86-7U",
-            authDomain: "minhquang-36ee2.firebaseapp.com",
-            databaseURL: "https://minhquang-36ee2-default-rtdb.firebaseio.com",
-            projectId: "minhquang-36ee2",
-            storageBucket: "minhquang-36ee2.firebasestorage.app",
-            messagingSenderId: "986858991599",
-            appId: "1:986858991599:web:53c36493204131a10c501a"
-        };
-
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const database = getDatabase(app);
-
-        // Make database available globally
-        window.database = database;
-        window.ref = ref;
-        window.onValue = onValue;
-        window.set = set;
-        window.get = get;
-
-        console.log('✅ Firebase v12 đã khởi tạo thành công');
-    </script>
+    <!-- Backend client -->
+    <script src="backend.js"></script>
+    
+    <!-- Backend Settings Modal -->
+    <div id="configModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.4); align-items:center; justify-content:center;">
+      <div style="background:#fff; padding:16px; border-radius:8px; width:90%; max-width:420px;">
+        <h3 style="margin-top:0"><i class="fas fa-cog"></i> Cấu hình Backend</h3>
+        <div class="setting-item">
+          <label for="apiBaseUrlInput">API Base URL</label>
+          <input id="apiBaseUrlInput" type="text" placeholder="http://localhost:8080" style="width:100%">
+        </div>
+        <div class="setting-item" style="margin-top:8px;">
+          <label for="apiKeyInput">API Key (tùy chọn)</label>
+          <input id="apiKeyInput" type="password" placeholder="Nhập API Key" style="width:100%">
+        </div>
+        <div style="margin-top:12px; display:flex; gap:8px; justify-content:flex-end;">
+          <button class="btn" onclick="closeConfigModal()">Đóng</button>
+          <button class="btn btn-open" onclick="saveBackendConfig()">Lưu</button>
+        </div>
+      </div>
+    </div>
     <script src="script.js"></script>
 </body>
 </html>

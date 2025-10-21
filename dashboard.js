@@ -1,5 +1,5 @@
 // Dashboard Analytics JavaScript
-let database, ref, onValue, set, get, push;
+// Remove direct Firebase usage; use backend API
 let usageChart, statusChart, peakChart, userChart;
 let analyticsData = {
     totalOpens: 0,
@@ -38,13 +38,11 @@ function waitForFirebase() {
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('📊 Dashboard initializing...');
     
-    await waitForFirebase();
-    
     // Initialize charts
     initializeCharts();
     
-    // Start listening to Firebase
-    startFirebaseListener();
+    // Start syncing from backend
+    startBackendSync();
     
     // Load historical data
     loadHistoricalData();
@@ -172,26 +170,23 @@ function initializeCharts() {
 }
 
 // Start Firebase listener
-function startFirebaseListener() {
-    console.log('📡 Starting Firebase listener...');
-    
-    // Listen to locker status
-    const lockerRef = ref(database, '/Locker1');
-    onValue(lockerRef, (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-            updateAnalytics(data);
-        }
-    });
-
-    // Listen to activity log
-    const activityRef = ref(database, '/analytics/activity');
-    onValue(activityRef, (snapshot) => {
-        const activities = snapshot.val();
-        if (activities) {
-            updateRecentActivity(activities);
-        }
-    });
+async function startBackendSync() {
+  console.log('📡 Starting backend sync...');
+  const pollLocker = async () => {
+    try {
+      const data = await window.Backend.getLocker();
+      if (data) updateAnalytics(data);
+    } catch (_) {}
+  };
+  const pollActivity = async () => {
+    try {
+      const acts = await window.Backend.getAnalyticsActivity();
+      if (acts) updateRecentActivity(acts);
+    } catch (_) {}
+  };
+  await Promise.all([pollLocker(), pollActivity()]);
+  setInterval(pollLocker, 3000);
+  setInterval(pollActivity, 5000);
 }
 
 // Update analytics data
@@ -223,8 +218,7 @@ function updateAnalytics(data) {
 
 // Log activity
 function logActivity(activity) {
-    const activityRef = ref(database, '/analytics/activity');
-    push(activityRef, activity);
+  window.Backend.postAnalyticsActivity(activity).catch(() => {});
 }
 
 // Update dashboard display
@@ -444,8 +438,7 @@ function refreshData() {
 // Clear activity
 function clearActivity() {
     if (confirm('Bạn có chắc muốn xóa tất cả hoạt động?')) {
-        const activityRef = ref(database, '/analytics/activity');
-        set(activityRef, null);
+        window.Backend.clearAnalyticsActivity().catch(() => {});
         
         document.getElementById('recentActivity').innerHTML = '';
         

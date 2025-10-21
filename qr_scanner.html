@@ -140,36 +140,8 @@
         </div>
     </div>
 
-    <!-- Firebase SDK v12 -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-app.js";
-        import { getDatabase, ref, onValue, set, get, push } from "https://www.gstatic.com/firebasejs/12.4.0/firebase-database.js";
-
-        // Firebase configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyBqfcOprdE5MT6m1yfXmRDtCzngtX86-7U",
-            authDomain: "minhquang-36ee2.firebaseapp.com",
-            databaseURL: "https://minhquang-36ee2-default-rtdb.firebaseio.com",
-            projectId: "minhquang-36ee2",
-            storageBucket: "minhquang-36ee2.firebasestorage.app",
-            messagingSenderId: "986858991599",
-            appId: "1:986858991599:web:53c36493204131a10c501a"
-        };
-
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const database = getDatabase(app);
-
-        // Make functions available globally
-        window.database = database;
-        window.ref = ref;
-        window.onValue = onValue;
-        window.set = set;
-        window.get = get;
-        window.push = push;
-
-        console.log('✅ QR Scanner Firebase initialized');
-    </script>
+    <!-- Backend client -->
+    <script src="backend.js"></script>
     <script src="qr_scanner.js"></script>
 </body>
 </html>

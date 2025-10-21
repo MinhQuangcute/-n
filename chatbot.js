@@ -1,22 +1,7 @@
 // Chatbot JavaScript - Minimal working version
 
-let database, ref, onValue, set, get, push;
-
-// Wait for Firebase objects that are exposed from chatbot.html inline module
-(function waitForFirebase() {
-	if (window.database && window.ref && window.onValue && window.set && window.get && window.push) {
-		database = window.database;
-		ref = window.ref;
-		onValue = window.onValue;
-		set = window.set;
-		get = window.get;
-		push = window.push;
-		console.log('✅ Chatbot Firebase ready');
-		initChatbot();
-		return;
-	}
-	setTimeout(waitForFirebase, 100);
-})();
+// Use backend instead of Firebase
+document.addEventListener('DOMContentLoaded', initChatbot);
 
 function initChatbot() {
 	const chatMessages = document.getElementById('chatMessages');
@@ -96,24 +81,19 @@ function escapeHtml(s) {
 }
 
 function commandLocker(action) {
-	if (!database || !ref || !set) {
-		botReply('Firebase chưa sẵn sàng. Vui lòng thử lại.');
-		return;
-	}
-	set(ref(database, '/Locker1/status'), action).catch((err) => {
-		console.error('Command error:', err);
-		botReply('Gửi lệnh thất bại: ' + (err && err.message ? err.message : 'Unknown error'));
-	});
+  window.Backend.commandLocker(action).catch((err) => {
+    console.error('Command error:', err);
+    botReply('Gửi lệnh thất bại: ' + (err && err.message ? err.message : 'Unknown error'));
+  });
 }
 
 async function readStatus() {
-	if (!database || !ref || !get) return null;
-	try {
-		const snap = await get(ref(database, '/Locker1/current_status'));
-		return snap.exists() ? snap.val() : null;
-	} catch (e) {
-		console.error('Read status error:', e);
-		return null;
-	}
+  try {
+    const data = await window.Backend.getLocker();
+    return data && data.current_status ? data.current_status : null;
+  } catch (e) {
+    console.error('Read status error:', e);
+    return null;
+  }
 }
 

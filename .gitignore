@@ -1,0 +1,21 @@
+# Node
+node_modules/
+server/node_modules/
+
+# Env
+.env
+server/.env
+.env.local
+
+# Firebase admin key (do not commit)
+server/serviceAccountKey.json
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+*.log
+
+# OS
+.DS_Store
