@@ -1,0 +1,28 @@
+{
+  "name": "adruino",
+  "version": "1.0.0",
+  "description": "Hệ thống điều khiển tủ khóa từ xa qua web với ESP32, Firebase và LED hiển thị trạng thái.",
+  "main": "chatbot.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MinhQuangcute/-n.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/MinhQuangcute/-n/issues"
+  },
+  "homepage": "https://github.com/MinhQuangcute/-n#readme",
+  "dependencies": {
+    "body-parser": "^2.2.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "firebase-admin": "^13.5.0",
+    "jsonwebtoken": "^9.0.2"
+  }
+}

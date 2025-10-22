@@ -1,6 +1,23 @@
+// client-app.js (phiên bản: Frontend gọi Backend -> Backend ghi Firebase -> ESP32 đọc)
 // Firebase v12 - Database functions are imported in HTML
 // Wait for Firebase to be initialized
 let database, ref, onValue, set, get;
+
+// ---------------------------- CONFIG ----------------------------
+// Thay bằng URL backend của bạn (ví dụ 'https://api.example.com' hoặc '' nếu cùng origin)
+const BACKEND_BASE = 'http://localhost:3000'; // <-- cấu hình tại đây, ví dụ 'http://localhost:3000'
+
+// Mặc định frontend sẽ lấy token JWT từ localStorage key 'access_token'
+// Nếu bạn dùng cách khác (cookie, session), cập nhật hàm getAuthToken()
+function getAuthToken() {
+    try {
+        return localStorage.getItem('access_token'); // hoặc null nếu chưa login
+    } catch (e) {
+        console.warn('Không thể đọc token từ localStorage', e);
+        return null;
+    }
+}
+// ----------------------------------------------------------------
 
 // Wait for Firebase to be ready
 function waitForFirebase() {
@@ -44,10 +61,14 @@ document.addEventListener('DOMContentLoaded', async function() {
     // Add initial activity log
     addActivityLog('Hệ thống khởi động', 'system');
     
+    // Hook button events (buttons call controlLocker, which now calls backend)
+    if (openBtn) openBtn.addEventListener('click', () => { if (!openBtn.disabled) controlLocker('open'); });
+    if (closeBtn) closeBtn.addEventListener('click', () => { if (!closeBtn.disabled) controlLocker('close'); });
+
     // Wait for Firebase to be ready
     await waitForFirebase();
     
-    // Start listening to Firebase
+    // Start listening to Firebase (read-only)
     startFirebaseListener();
     
     // Update time every second
@@ -57,12 +78,12 @@ document.addEventListener('DOMContentLoaded', async function() {
     setInterval(checkConnectionStatus, 5000);
 });
 
-// Firebase listener
+// Firebase listener (chỉ đọc, giữ nguyên)
 function startFirebaseListener() {
     console.log('📡 Bắt đầu lắng nghe Firebase...');
     
     try {
-        // Listen to locker status changes
+        // Listen to locker status changes (node /Locker1 holds status + metadata)
         const lockerRef = ref(database, '/Locker1');
         
         onValue(lockerRef, (snapshot) => {
@@ -81,7 +102,7 @@ function startFirebaseListener() {
             console.error('❌ Lỗi Firebase:', error);
             isConnected = false;
             updateConnectionStatus(false);
-            addActivityLog('Lỗi kết nối Firebase: ' + error.message, 'error');
+            addActivityLog('Lỗi kết nối Firebase: ' + (error.message || error), 'error');
         });
         
         // Test connection
@@ -96,7 +117,7 @@ function startFirebaseListener() {
             }
         });
         
-        // Listen to status changes specifically
+        // Listen to status changes specifically (optional: show when a new command appears)
         const statusRef = ref(database, '/Locker1/status');
         onValue(statusRef, (snapshot) => {
             const status = snapshot.val();
@@ -114,11 +135,11 @@ function startFirebaseListener() {
 
 // Update locker status display
 function updateLockerStatus(data) {
-    const currentStatus = data.current_status || 'closed';
-    const lastUpdate = data.last_update || Date.now();
+    const currentStatus = data.current_status || data.status || 'closed';
+    const lastUpdateVal = data.last_update || data.updatedAt || Date.now();
     
     currentLockerStatus = currentStatus;
-    lastUpdateTime = new Date(parseInt(lastUpdate));
+    lastUpdateTime = new Date(parseInt(lastUpdateVal));
     
     // Update status display
     const statusElement = lockerStatus.querySelector('.status-text');
@@ -143,6 +164,13 @@ function updateLockerStatus(data) {
             statusElement.textContent = 'Đang đóng...';
             statusIcon.textContent = '🔄';
             break;
+        case 'reserved':
+            statusElement.textContent = 'Đã đặt trước';
+            statusIcon.textContent = '📦';
+            break;
+        default:
+            statusElement.textContent = currentStatus;
+            statusIcon.textContent = 'ℹ️';
     }
     
     // Update buttons
@@ -163,19 +191,62 @@ function updateButtonStates(status) {
     }
 }
 
-// Control locker function
-function controlLocker(action) {
-    console.log(`🎮 Gửi lệnh: ${action}`);
+// ---------------- IMPORTANT: sendCommandViaBackend ----------------
+// Frontend không ghi trực tiếp lên Firebase nữa.
+// Gọi backend API: POST /api/command  { lockerId, action }
+// Header: Authorization: Bearer <token> (nếu có)
+async function sendCommandViaBackend(lockerId = 'Locker1', action = 'open') {
+    console.log(`🎮 Gọi backend gửi lệnh: ${action} cho ${lockerId}`);
     
-    // Check if Firebase is ready
-    if (!database || !ref || !set) {
-        console.error('❌ Firebase chưa sẵn sàng');
-        alert('⚠️ Firebase chưa sẵn sàng! Vui lòng đợi và thử lại.');
-        addActivityLog('Firebase chưa sẵn sàng', 'error');
-        return;
+    // UI loading
+    if (action === 'open') {
+        openBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang gửi...';
+        openBtn.disabled = true;
+    } else {
+        closeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang gửi...';
+        closeBtn.disabled = true;
     }
+
+    const token = getAuthToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    try {
+        const res = await fetch(`${BACKEND_BASE}/api/command`, {
+            method: 'POST',
+            headers,
+            credentials: 'include', // nếu backend dùng cookie/session; tùy cấu hình
+            body: JSON.stringify({ lockerId, action })
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            const msg = data.error || data.message || `HTTP ${res.status}`;
+            throw new Error(msg);
+        }
+
+        addActivityLog(`Yêu cầu lệnh gửi tới backend: ${action}`, 'user');
+        console.log('↪ Backend response:', data);
+
+        // Backend sẽ, nếu hợp lệ, ghi lệnh vào Firebase (Commands/..., hoặc /Locker1/status)
+        // Client sẽ thấy cập nhật qua Firebase listener.
+
+    } catch (error) {
+        console.error('❌ Lỗi gọi backend:', error);
+        addActivityLog('Lỗi gọi backend: ' + (error.message || error), 'error');
+        alert('Không thể gửi lệnh đến server: ' + (error.message || error));
+    } finally {
+        resetButtons();
+    }
+}
+
+// Control locker function (thay vì ghi trực tiếp vào Firebase, gọi backend)
+function controlLocker(action) {
+    console.log(`🎮 Yêu cầu điều khiển tủ: ${action}`);
     
-    // Show loading state
+    // Optional: user confirmation for sensitive actions
+    // if (!confirm(`Bạn có chắc muốn ${action} tủ?`)) return;
+
+    // Show processing state immediately
     if (action === 'open') {
         openBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang xử lý...';
         openBtn.disabled = true;
@@ -183,42 +254,9 @@ function controlLocker(action) {
         closeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Đang xử lý...';
         closeBtn.disabled = true;
     }
-    
-    // Send command to Firebase
-    try {
-        const statusRef = ref(database, '/Locker1/status');
-        set(statusRef, action)
-            .then(() => {
-                console.log(`✅ Đã gửi lệnh ${action} thành công`);
-                addActivityLog(`Gửi lệnh: ${action}`, 'user');
-                
-                // Reset button after 3 seconds
-                setTimeout(() => {
-                    resetButtons();
-                }, 3000);
-            })
-            .catch((error) => {
-                console.error('❌ Lỗi gửi lệnh:', error);
-                let errorMessage = 'Không thể gửi lệnh!';
-                
-                if (error.code === 'PERMISSION_DENIED') {
-                    errorMessage = 'Lỗi quyền truy cập! Kiểm tra Firebase Rules.';
-                } else if (error.code === 'NETWORK_ERROR') {
-                    errorMessage = 'Lỗi mạng! Kiểm tra kết nối internet.';
-                } else if (error.code === 'UNAVAILABLE') {
-                    errorMessage = 'Firebase không khả dụng! Thử lại sau.';
-                }
-                
-                alert('❌ ' + errorMessage);
-                addActivityLog('Lỗi gửi lệnh: ' + error.message, 'error');
-                resetButtons();
-            });
-    } catch (error) {
-        console.error('❌ Lỗi khởi tạo gửi lệnh:', error);
-        alert('❌ Lỗi khởi tạo gửi lệnh! Vui lòng thử lại.');
-        addActivityLog('Lỗi khởi tạo gửi lệnh: ' + error.message, 'error');
-        resetButtons();
-    }
+
+    // Call backend to perform the command
+    sendCommandViaBackend('Locker1', action);
 }
 
 // Reset buttons
@@ -320,18 +358,23 @@ window.addEventListener('offline', () => {
     updateConnectionStatus(false);
 });
 
-// Settings functions
-document.getElementById('autoCloseTime').addEventListener('change', function() {
-    const value = this.value;
-    console.log(`⚙️ Thời gian tự đóng: ${value}s`);
-    addActivityLog(`Cập nhật thời gian tự đóng: ${value}s`, 'system');
-});
-
-document.getElementById('checkInterval').addEventListener('change', function() {
-    const value = this.value;
-    console.log(`⚙️ Tần suất kiểm tra: ${value}s`);
-    addActivityLog(`Cập nhật tần suất kiểm tra: ${value}s`, 'system');
-});
+// Settings functions (safely guard DOM access)
+const autoCloseEl = document.getElementById('autoCloseTime');
+if (autoCloseEl) {
+    autoCloseEl.addEventListener('change', function() {
+        const value = this.value;
+        console.log(`⚙️ Thời gian tự đóng: ${value}s`);
+        addActivityLog(`Cập nhật thời gian tự đóng: ${value}s`, 'system');
+    });
+}
+const checkIntervalEl = document.getElementById('checkInterval');
+if (checkIntervalEl) {
+    checkIntervalEl.addEventListener('change', function() {
+        const value = this.value;
+        console.log(`⚙️ Tần suất kiểm tra: ${value}s`);
+        addActivityLog(`Cập nhật tần suất kiểm tra: ${value}s`, 'system');
+    });
+}
 
 // Keyboard shortcuts
 document.addEventListener('keydown', function(event) {
@@ -352,7 +395,7 @@ document.addEventListener('keydown', function(event) {
 // Add keyboard shortcut info
 addActivityLog('Phím tắt: Ctrl+O (Mở), Ctrl+C (Đóng)', 'system');
 
-// Debug function
+// Debug function (GHI lên /debug — VẪN CÒN, nhưng KHÔNG dùng để gửi lệnh nhạy cảm)
 function debugFirebase() {
     console.log('🔍 Debug Firebase...');
     console.log('Database:', database);
@@ -360,7 +403,7 @@ function debugFirebase() {
     console.log('Set function:', set);
     console.log('OnValue function:', onValue);
     
-    // Test simple write
+    // Test simple write (chỉ debug non-sensitive node)
     try {
         const debugRef = ref(database, '/debug');
         set(debugRef, { 

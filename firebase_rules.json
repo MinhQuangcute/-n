@@ -1,0 +1,118 @@
+{
+  "rules": {
+    // Lockers - ESP32 có thể đọc/ghi trạng thái
+    "Lockers": {
+      "$lockerId": {
+        ".read": true,
+        ".write": "auth != null || $lockerId == 'Locker1'", // ESP32 hoặc authenticated users
+        "status": {
+          ".validate": "newData.isString() && (newData.val() == 'empty' || newData.val() == 'reserved' || newData.val() == 'occupied')"
+        },
+        "lastUpdate": {
+          ".validate": "newData.isNumber()"
+        },
+        "doorSensor": {
+          ".validate": "newData.isString() && (newData.val() == 'open' || newData.val() == 'closed')"
+        }
+      }
+    },
+    
+    // Commands - Chỉ backend có thể ghi, ESP32 có thể đọc
+    "Commands": {
+      "$lockerId": {
+        ".read": true,
+        ".write": "auth != null", // Chỉ backend authenticated
+        "cmd": {
+          ".validate": "newData.isString() && (newData.val() == 'open' || newData.val() == 'close')"
+        },
+        "by": {
+          ".validate": "newData.isString() && newData.val().length > 0"
+        },
+        "ts": {
+          ".validate": "newData.isNumber()"
+        },
+        "approvedBy": {
+          ".validate": "newData.isString() && newData.val().indexOf('backend') >= 0"
+        }
+      }
+    },
+    
+    // Reservations - Chỉ backend có thể đọc/ghi
+    "Reservations": {
+      "$reservationId": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "lockerId": {
+          ".validate": "newData.isString()"
+        },
+        "phone": {
+          ".validate": "newData.isString() && newData.val().length > 0"
+        },
+        "reservedBy": {
+          ".validate": "newData.isString()"
+        },
+        "createdAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "expiresAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "status": {
+          ".validate": "newData.isString() && (newData.val() == 'waiting' || newData.val() == 'claimed' || newData.val() == 'expired')"
+        },
+        "otp": {
+          ".read": "auth != null",
+          ".write": "auth != null",
+          "hash": {
+            ".validate": "newData.isString()"
+          },
+          "expiresAt": {
+            ".validate": "newData.isNumber()"
+          },
+          "attempts": {
+            ".validate": "newData.isNumber() && newData.val() >= 0"
+          }
+        }
+      }
+    },
+    
+    // Logs - Chỉ backend có thể ghi, có thể đọc để debug
+    "Logs": {
+      "$logId": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        "user": {
+          ".validate": "newData.isString()"
+        },
+        "action": {
+          ".validate": "newData.isString()"
+        },
+        "lockerId": {
+          ".validate": "newData.isString()"
+        },
+        "timestamp": {
+          ".validate": "newData.isNumber()"
+        },
+        "result": {
+          ".validate": "newData.isString() && (newData.val() == 'success' || newData.val() == 'failed')"
+        }
+      }
+    },
+    
+    // Debug - Chỉ cho development
+    "debug": {
+      ".read": true,
+      ".write": true
+    },
+    
+    // Legacy paths - Deprecated nhưng vẫn hoạt động
+    "Locker1": {
+      ".read": true,
+      ".write": "auth != null || $lockerId == 'Locker1'"
+    }
+  }
+}
+
+
+
+
